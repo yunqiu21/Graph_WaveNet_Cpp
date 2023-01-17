@@ -6,90 +6,124 @@ using std::vector;
 #define max(x, y) x < y ? y : x
 #define min(x, y) x > y ? y : x
 
+#define kNumNodes 20
+#define kDropout 0.3
+#define kSupportDim0 0
+#define kSupportDim1 0
+#define kSupportDim2 0
+#define kInDim 2
 #define kInDim0 4
 #define kInDim1 4
 #define kInDim2 4
 #define kInDim3 4
-
+#define kOutDim 12
+#define kResidualChannels 32
+#define kDilationChannels 32
+#define kSkipChannels 256
+#define kEndChannels 512
 #define kKernelSize 2
-
-#define kResidualChannels 3
-#define kDilationChannels 3
-#define kSkipChannels 3
-#define kEndChannels 3
-#define kOutDim 3
-
 #define kBlocks 4
 #define kLayers 2
+#define kReceptiveField 13
 
-#define kReceptiveField 10
+/********************** helper classes **********************/
 
-#define kSupportDim0 0
-#define kSupportDim1 0
-#define kSupportDim2 0
-
-#define kNumNodes 20
-
-void BatchNorm2d() {
+class BatchNorm2d {
   
-}
+};
 
-void Conv1d(int in_channel, int out_channel, float* bias, float* weight,
-        int kernelW, int d, float* data, int inW) {
-  // convolution
-  // input dimension: [minibatch][in_channels][iW]
-  // output dimension: [minibatch][out_channels][iW-D(kW-1)]
+class Conv1d {
+  public:
+  Conv1d(int in_channels, int out_channels, int kernelH, int kernelW, int dilation) {
+    m_in_channels = in_channels;
+    m_out_channels = out_channels;
+    m_kernelH = kernelH;
+    m_kernelW = kernelW;
+    m_dilation = dilation;
+    m_weight = new float[m_kernelH][m_kernelW];
+    m_bias = new float[m_out_channels];
+  }
 
-  /* calculate output dimension */
-  int outW = inW - d * (kernelW - 1);
-  float* output;
-  for (int m = 0; m < minibatch; m++) {
-    /* set bias */
-    for (int i = 0; i < out_channel; i++) {
-      for (int w = 0; w < outW; w++) {
-        output[m][i][w] = bias[i];
-      }
-    }
+  ~Conv1d() {
+    delete[] m_weight;
+    delete[] m_bias;
+  }
+
+  void forward(float* input,  int inW,  int minibatch,
+               float* output, int outW) {
     /* convolution */
-    for (int i = 0; i < out_channel; i++) {
-      for (int j = 0; j < in_channel; j++) {
+    // input: [minibatch][m_in_channels][inW]
+    // output: [minibatch][m_out_channels][inW-m_dilation(m_kernelW-1)]
+    for (int m = 0; m < minibatch; m++) {
+      /* set bias */
+      for (int i = 0; i < m_out_channels; i++) {
         for (int w = 0; w < outW; w++) {
-          for (int q = 0; q < kernelW; q++) {
-            output[m][i][w] += data[m][j][w+q*d] * weight[i][j][q];
+          output[m][i][w] = m_bias[i];
+        }
+      }
+      /* convolution */
+      for (int i = 0; i < m_out_channels; i++) {
+        for (int j = 0; j < m_in_channels; j++) {
+          for (int w = 0; w < outW; w++) {
+            for (int q = 0; q < m_kernelW; q++) {
+              output[m][i][w] += input[m][j][w+q*d] * m_weight[i][j][q];
+            }
           }
         }
       }
     }
   }
-}
 
-void Conv2d(int in_channel, int out_channel, float* bias, float* weight,
-        int kernelH, int kernelW, int d, float* data, int inH, int inW, float* output) {
-  // convolution
-  // input dimension: [minibatch][in_channels][iH][iW]
-  // output dimension: [minibatch][out_channels][iH-D(kH-1)][iW-D(kW-1)]
+  private:
+  int m_in_channels;
+  int m_out_channels;
+  int m_kernelH;
+  int m_kernelW;
+  int m_dilation;
+  float* m_weight;
+  float* m_bias;
+};
 
-  /* calculate output dimension */
-  int outH = inH - d * (kernelH - 1);
-  int outW = inW - d * (kernelW - 1);
-  float output[kInDim0][out_channel][outH][outW];
-  for (int m = 0; m < minibatch; m++) {
-    /* set bias */
-    for (int i = 0; i < out_channel; i++) {
-      for (int h = 0; h < outH; h++) {
-        for (int w = 0; w < outW; w++) {
-          output[m][i][h][w] = bias[i];
-        }
-      }
-    }
+class Conv2d {  
+  public:
+  Conv2d(int in_channels, int out_channels, int kernelH, int kernelW, int dilation) {
+    m_in_channels = in_channels;
+    m_out_channels = out_channels;
+    m_kernelH = kernelH;
+    m_kernelW = kernelW;
+    m_dilation = dilation;
+    m_weight = new float[m_kernelH][m_kernelW];
+    m_bias = new float[m_out_channels];
+  }
+
+  ~Conv2d() {
+    delete[] m_weight;
+    delete[] m_bias;
+  }
+
+  void forward(float* input,  int inH,  int inW,  int minibatch,
+               float* output, int outH, int outW) {
     /* convolution */
-    for (int i = 0; i < out_channel; i++) {
-      for (int j = 0; j < in_channel; j++) {
+    // input: [minibatch][m_in_channels][inH][inW]
+    // output: [minibatch][m_out_channels][inH-m_dilation(m_kernelH-1)][inW-m_dilation(m_kernelW-1)]
+    for (int m = 0; m < minibatch; m++) {
+      /* set bias */
+      for (int i = 0; i < m_out_channels; i++) {
         for (int h = 0; h < outH; h++) {
           for (int w = 0; w < outW; w++) {
-            for (int p = 0; p < kernelH; p++) {
-              for (int q = 0; q < kernelW; q++) {
-                output[m][i][h][w] += data[m][j][h+p*d][w+q*d] * weight[i][j][p][q];
+            output[m][i][h][w] = m_bias[i];
+          }
+        }
+      }
+      /* convolution */
+      for (int i = 0; i < m_out_channels; i++) {
+        for (int j = 0; j < m_in_channels; j++) {
+          for (int h = 0; h < outH; h++) {
+            for (int w = 0; w < outW; w++) {
+              for (int p = 0; p < m_kernelH; p++) {
+                for (int q = 0; q < m_kernelW; q++) {
+                  output[m][i][h][w] += input[m][j][h+p*d][w+q*d] * m_weight[i][j][p][q];
+                }
               }
             }
           }
@@ -97,108 +131,112 @@ void Conv2d(int in_channel, int out_channel, float* bias, float* weight,
       }
     }
   }
-}
 
-float* leaky_relu(float* data, int size) {
+  private:
+  int m_in_channels;
+  int m_out_channels;
+  int m_kernelH;
+  int m_kernelW;
+  int m_dilation;
+  float m_weight[m_kernelH][m_kernelW];
+  float m_bias[m_out_channels];
+};
+
+/******************* helper functions ******************/
+
+void leaky_relu(float* input, int size) {
   for (int i = 0; i < size; i++) {
-    data[i] = max(data[i], 0) + 0.01 * min(data[i], 0);
+    input[i] = max(input[i], 0) + 0.01 * min(input[i], 0);
   }
-  return data;
 }
 
-float* relu(float* data, int size) {
+void relu(float* input, int size) {
   for (int i = 0; i < size; i++) {
-    data[i] = max(data[i], 0);
+    input[i] = max(input[i], 0);
   }
-  return data;
 }
 
-float* softmax_dim1(float* data, int dim0, int dim1) {
+void softmax_dim1(float* input, int dim0, int dim1) {
   for (int i = 0; i < dim0; i++) {
     float exp_sum = 0;
     for (int j = 0; j < dim1; j++) {
-      exp_sum += exp(data[i][j]);
+      exp_sum += exp(input[i][j]);
     }
     for (int j = 0; j < dim1; j++) {
-      data[i][j] = exp(data[i][j]) / exp_sum;
+      input[i][j] = exp(input[i][j]) / exp_sum;
     }
   }
 }
 
-float* sigmoid(float* data, int size) {
+void sigmoid(float* input, int size) {
   for (int i = 0; i < size; i++) {
-    data[i] = 1 / (1 + exp(-data[i]));
+    input[i] = 1 / (1 + exp(-input[i]));
   }
-  return data;
 }
 
-float* tanh(float* data, int size) {
+void tanh(float* input, int size) {
   for (int i = 0; i < size; i++) {
-    data[i] = tanh(data[i]);
+    input[i] = tanh(input[i]);
   }
-  return data;
 }
 
-float* matmul(float* mat1, float* mat2, Dim2 mat1dim, Dim2 mat2dim) {
-  if (mat1dim.dim1 != mat2dim.dim0) {
-    return nullptr;
+void matmul(float* mat1, int mat1H, int mat1W, 
+            float* mat2, int mat2H, int mat2W,
+            float* output) {
+  if (mat1W != mat2H) {
+    // throw error
+    return;
   }
-  float* output;
-  for (int i = 0; i < mat1dim.dim0; i++) {
-    for (int k = 0; k < mat2dim.dim1; k++) {
+  for (int i = 0; i < mat1H; i++) {
+    for (int k = 0; k < mat2W; k++) {
       output[i][k] = 0;
     }
   }
   // matrix multiplication
-  for (int i = 0; i < mat1dim.dim0; i++) {
-    for (int k = 0; k < mat2dim.dim1; k++) {
-      for (int j = 0; j < mat1dim.dim1; j++) {
+  for (int i = 0; i < mat1H; i++) {
+    for (int k = 0; k < mat2W; k++) {
+      for (int j = 0; j < mat1W; j++) {
         output[i][k] += mat1[i][j] * mat2[j][k];
       }
     }
   }
-  return output;
 }
 
 // element-wise matrix addition
-float* elem_add(float* arr1, float* arr2, Dim4 dim) {
-  float* output = new float[dim.dim0][dim.dim1][dim.dim2][dim.dim3];
-  for (int i = 0; i < dim.dim0; i++) {
-    for (int j = 0; j < dim.dim1; j++) {
-      for (int k = 0; k < dim.dim2; k++) {
-        for (int l = 0; l < dim.dim3; l++) {
+void elem_add(float* arr1, float* arr2, float* output, 
+              int dim0, int dim1, int dim2, int dim3) {
+  for (int i = 0; i < dim0; i++) {
+    for (int j = 0; j < dim1; j++) {
+      for (int k = 0; k < dim2; k++) {
+        for (int l = 0; l < dim3; l++) {
           output[i][j][k][l] = arr1[i][j][k][l] + arr2[i][j][k][l];
         }
       }
     }
   }
-  return output;
 }
 
 // element-wise matrix multiplication
-float* elem_mul(float* arr1, float* arr2, Dim4 dim) {
-  float* output = new float[dim.dim0][dim.dim1][dim.dim2][dim.dim3];
-  for (int i = 0; i < dim.dim0; i++) {
-    for (int j = 0; j < dim.dim1; j++) {
-      for (int k = 0; k < dim.dim2; k++) {
-        for (int l = 0; l < dim.dim3; l++) {
+void elem_add(float* arr1, float* arr2, float* output, 
+              int dim0, int dim1, int dim2, int dim3) {
+  for (int i = 0; i < dim0; i++) {
+    for (int j = 0; j < dim1; j++) {
+      for (int k = 0; k < dim2; k++) {
+        for (int l = 0; l < dim3; l++) {
           output[i][j][k][l] = arr1[i][j][k][l] * arr2[i][j][k][l];
         }
       }
     }
   }
-  return output;
 }
 
 class GraphWaveNet {
  public:
-  GraphWaveNet(int num_nodes, float dropout=0.3, float* supports=NULL, bool do_graph_conv=true,
+  GraphWaveNet(float dropout=0.3, float* supports=NULL, bool do_graph_conv=true,
          bool addaptadj=true, float* aptinit=NULL, int in_dim=2, int out_dim=12,
-         int residual_channels=32, int dilation_channels=32, bool cat_feat_gc=false,
-         int skip_channels=256, int end_channels=512, int kernel_size=2, int blocks=4, int layers=2,
-         int apt_size=10);
+         bool cat_feat_gc=false, int apt_size=10);
   ~GraphWaveNet();
-  float* forward(float* x);
+  float* forward(float* input);
  private:
   int m_num_nodes;
   float m_dropout;
@@ -239,14 +277,14 @@ GraphWaveNet::GraphWaveNet(int num_nodes, float dropout, float* supports, bool d
   m_apt_size = apt_size;
 
   int receptive_field = 1;
-  for (int b = 0; b < m_blocks; b++) {
+  for (int b = 0; b < kBlocks; b++) {
     int additional_scope = kKernelSize - 1;
     int D = 1;
-    for (int i = 0; i < m_layers; i++) {
+    for (int i = 0; i < kLayers; i++) {
       // dilated convolutions
       // self.filter_convs.append(Conv2d(residual_channels, dilation_channels, (1, kernel_size), dilation=D))
       // self.gate_convs.append(Conv1d(residual_channels, dilation_channels, (1, kernel_size), dilation=D))
-      m_dil_convs[b * m_layers + i] = D;
+      m_dil_convs[b * kLayers + i] = D;
       D *= 2;
       receptive_field += additional_scope;
       additional_scope *= 2;
@@ -286,12 +324,6 @@ GraphWaveNet::GraphWaveNet(int num_nodes, float dropout, float* supports, bool d
       m_nodevec2 = torch.mm(torch.diag(p[:10] ** 0.5), n[:, :10].t())
     }
   }
-}
-
-// destructor
-GraphWaveNet::~GraphWaveNet() {
-  delete[] m_x;
-  // todo: delete all other dynamic arrays
 }
 
 float* GraphWaveNet::forward(float* input) {
