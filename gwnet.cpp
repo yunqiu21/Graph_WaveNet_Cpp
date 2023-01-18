@@ -12,10 +12,10 @@ using std::vector;
 #define kSupportDim1 0
 #define kSupportDim2 0
 #define kInDim 2
-#define kInDim0 4
-#define kInDim1 4
-#define kInDim2 4
-#define kInDim3 4
+#define kInDim0 4 /* batch size */
+#define kInDim1 4 /* features */
+#define kInDim2 4 /* num nodes */
+#define kInDim3 4 /* num timesteps */
 #define kOutDim 12
 #define kResidualChannels 32
 #define kDilationChannels 32
