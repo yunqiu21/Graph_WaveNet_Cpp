@@ -28,13 +28,17 @@ using std::vector;
 
 /********************** helper classes **********************/
 
+class GCN {
+
+};
+
 class BatchNorm2d {
   
 };
 
 class Conv1d {
   public:
-  Conv1d(int in_channels, int out_channels, int kernelH, int kernelW, int dilation) {
+  Conv1d(int in_channels, int out_channels, int kernelH, int kernelW, int dilation = 1, bool bias = true) {
     m_in_channels = in_channels;
     m_out_channels = out_channels;
     m_kernelH = kernelH;
@@ -86,7 +90,7 @@ class Conv1d {
 
 class Conv2d {  
   public:
-  Conv2d(int in_channels, int out_channels, int kernelH, int kernelW, int dilation) {
+  Conv2d(int in_channels, int out_channels, int kernelH, int kernelW, int dilation = 1, bool bias = true) {
     m_in_channels = in_channels;
     m_out_channels = out_channels;
     m_kernelH = kernelH;
@@ -232,94 +236,72 @@ void elem_add(float* arr1, float* arr2, float* output,
 
 class GraphWaveNet {
  public:
-  GraphWaveNet(float* supports=NULL, bool do_graph_conv=true,
+  GraphWaveNet(float* supports=NULL, bool gcn_bool=true,
          bool addaptadj=true, float* aptinit=NULL);
   ~GraphWaveNet();
   float* forward(float* input);
  private:
-  int m_num_nodes;
-  float m_dropout;
-  float* m_supports; // an array of 2d arrays
-  bool m_do_graph_conv;
-  bool m_addaptadj;
+  float* m_supports; // array of 2d arrays
+  bool   m_gcn_bool;
+  bool   m_addaptadj;
   float* m_aptinit;
-  int m_in_dim;
-  int m_out_dim;
-  int m_cat_feat_gc;
-  int m_skip_channels;
-  int m_end_channels;
-  int m_apt_size;
 
-  float* m_x;
+  int m_support_len;
   int m_receptive_field;
-  int m_num_timesteps;
-
-  float* m_dil_convs;
 
   float m_nodevec1[kNumNodes][10];
   float m_nodevec2[10][kNumNodes];
+
+  Conv2d m_filter_convs[];
+  Conv1d m_gate_convs[];
+  Conv1d m_residual_convs[];
+  Conv1d m_skip_convs[];
+  BatchNorm2d m_bn[];
+  GCN m_gconv[];
+  Conv2d m_start_conv;
+  Conv2d m_end_conv_1;
+  Conv2d m_end_conv_2;
 };
 
-GraphWaveNet::GraphWaveNet(float* supports, bool do_graph_conv,
+GraphWaveNet::GraphWaveNet(float* supports, bool gcn_bool,
          bool addaptadj, float* aptinit) {
   // set member fields
-  if (supports) {
-    m_supports = supports;
-  }
-  m_do_graph_conv = do_graph_conv;
+  m_supports = supports;
+  m_gcn_bool = gcn_bool;
   m_addaptadj = addaptadj;
-  if (aptinit) {
-    m_aptinit = aptinit;
-  }
+  m_aptinit = aptinit;
+
+  m_start_conv = Conv2d(kInDim, kResidualChannels, 1, 1);
 
   int receptive_field = 1;
+  m_support_len = 0;
+  if (supports) {
+    m_support_len += kSupportDim0;
+  }
+  if (gcn_bool && addaptadj) {
+    m_support_len += 1;    
+  }
   for (int b = 0; b < kBlocks; b++) {
     int additional_scope = kKernelSize - 1;
-    int D = 1;
-    for (int i = 0; i < kLayers; i++) {
-      // dilated convolutions
-      // self.filter_convs.append(Conv2d(residual_channels, dilation_channels, (1, kernel_size), dilation=D))
-      // self.gate_convs.append(Conv1d(residual_channels, dilation_channels, (1, kernel_size), dilation=D))
-      m_dil_convs[b * kLayers + i] = D;
-      D *= 2;
+    int new_dilation = 1;
+    for (int l = 0; l < kLayers; l++) {
+      int index = b * kLayers + l;
+      m_filter_convs[index] = Conv2d(kResidualChannels, kDilationChannels, 1, kKernelSize, new_dilation);
+      m_gate_convs[index] = Conv1d(kResidualChannels, kDilationChannels, 1, kKernelSize, new_dilation);
+      m_residual_convs[index] = Conv1d(kDilationChannels, kResidualChannels, 1, 1);
+      m_skip_convs[index] = Conv1d(kDilationChannels, kSkipChannels, 1, 1);
+      m_bn[index] = BatchNorm2d(kResidualChannels);
+      new_dilation *= 2;
       receptive_field += additional_scope;
       additional_scope *= 2;
+      if (gcn_bool) {
+        m_gconv[index] = GCN(kDilationChannels, kResidualChannels, kDropout, m_support_len);
+      }
     }
   }
+  m_end_conv_1 = Conv2d(kSkipChannels, kEndChannels, 1, 1);
+  m_end_conv_2 = Conv2d(kEndChannels, kOutDim, 1, 1);
   m_receptive_field = receptive_field;
-
-
-  /* nodevec */
-  std::default_random_engine generator;
-  std::normal_distribution<float> distribution(1.0, 0.0);
-
-  if (gcn_bool && addaptadj) {
-    if (!aptinit) {
-      if (!supports) {
-        m_supports = NULL;
-      }
-      for (int i = 0; i < num_nodes; i++) {
-        for (int j = 0; j < 10; j++) {
-          float number = distribution(generator);
-          m_nodevec1[i][j] = number;
-        }
-      }
-      for (int i = 0; i < 10; i++) {
-        for (int j = 0; j < num_nodes; j++) {
-          float number = distribution(generator);
-          m_nodevec2[i][j] = number;
-        }
-      }
-    } else {
-      if (!supports) {
-        m_supports = NULL;
-      }
-      // todo
-      m, p, n = torch.svd(aptinit)
-      m_nodevec1 = torch.mm(m[:, :10], torch.diag(p[:10] ** 0.5))
-      m_nodevec2 = torch.mm(torch.diag(p[:10] ** 0.5), n[:, :10].t())
-    }
-  }
 }
 
 float* GraphWaveNet::forward(float* input) {
@@ -355,9 +337,14 @@ float* GraphWaveNet::forward(float* input) {
   
   // calculate the current adaptive adj matrix once per iteration
   float new_supports[kSupportDim0][kSupportDim1][kSupportDim2];
-  if (m_addaptadj) {
-    adp = softmax_dim1(relu(matmul(m_nodevec1, m_nodevec2)), kNumNodes, kNumNodes);
-    // new_supports = self.supports + [adp]
+  if (m_gcn_bool && m_addaptadj && m_supports) {
+    float adp[kNumNodes][kNumNodes];
+    matmul(m_nodevec1, kNumNodes, 10,
+           m_nodevec2, 10, kNumNodes,
+           adp);
+    relu((float*)adp, kNumNodes*kNumNodes);
+    softmax_dim1(adp, kNumNodes, kNumNodes);
+    /* new_supports = m_supports + [adp] */
     for (int i = 0; i < kSupportDim0 + 1; i++) {
       for (int j = 0; j < kSupportDim1; j++) {
         for (int k = 0; k < kSupportDim2; k++) {
@@ -370,7 +357,6 @@ float* GraphWaveNet::forward(float* input) {
       }
     }
   }
-
 
   for (int i = 0; i < kBlocks * kLayers; i++) {
     float* residual = x; // todo: make a shallow copy
