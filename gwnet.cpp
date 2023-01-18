@@ -361,9 +361,12 @@ float* GraphWaveNet::forward(float* input) {
       }
     }
   }
-  int xH = ;
-  int xW = ;
+  Conv2d sc = m_start_conv;
+  const int xH = kInDim2 - sc.Dilation() * (sc.KernelH() - 1);
+  const int xW = kInDim3 - sc.Dilation() * (sc.KernelW() - 1);
   float x_tmp[kInDim0][kResidualChannels][xH][xW];
+  sc.forward(x, kInDim2, kInDim3, kInDim0, x_tmp, xH, xW);
+  x = x_tmp;
   int skip = 0;
   
   // calculate the current adaptive adj matrix once per iteration
