@@ -232,9 +232,8 @@ void elem_add(float* arr1, float* arr2, float* output,
 
 class GraphWaveNet {
  public:
-  GraphWaveNet(float dropout=0.3, float* supports=NULL, bool do_graph_conv=true,
-         bool addaptadj=true, float* aptinit=NULL, int in_dim=2, int out_dim=12,
-         bool cat_feat_gc=false, int apt_size=10);
+  GraphWaveNet(float* supports=NULL, bool do_graph_conv=true,
+         bool addaptadj=true, float* aptinit=NULL);
   ~GraphWaveNet();
   float* forward(float* input);
  private:
@@ -261,20 +260,17 @@ class GraphWaveNet {
   float m_nodevec2[10][kNumNodes];
 };
 
-GraphWaveNet::GraphWaveNet(int num_nodes, float dropout, float* supports, bool do_graph_conv,
-         bool addaptadj, float* aptinit, int in_dim, int out_dim,
-         int residual_channels, int dilation_channels, bool cat_feat_gc,
-         int skip_channels, int end_channels, int kernel_size, int blocks, int layers,
-         int apt_size) {
+GraphWaveNet::GraphWaveNet(float* supports, bool do_graph_conv,
+         bool addaptadj, float* aptinit) {
   // set member fields
-  m_num_nodes = num_nodes;
-  m_dropout = dropout;
-  m_supports = supports;
+  if (supports) {
+    m_supports = supports;
+  }
   m_do_graph_conv = do_graph_conv;
   m_addaptadj = addaptadj;
-  m_aptinit = aptinit;
-  m_cat_feat_gc = cat_feat_gc;
-  m_apt_size = apt_size;
+  if (aptinit) {
+    m_aptinit = aptinit;
+  }
 
   int receptive_field = 1;
   for (int b = 0; b < kBlocks; b++) {
@@ -300,7 +296,7 @@ GraphWaveNet::GraphWaveNet(int num_nodes, float dropout, float* supports, bool d
   if (gcn_bool && addaptadj) {
     if (!aptinit) {
       if (!supports) {
-        m_supports = nullptr;
+        m_supports = NULL;
       }
       for (int i = 0; i < num_nodes; i++) {
         for (int j = 0; j < 10; j++) {
@@ -316,7 +312,7 @@ GraphWaveNet::GraphWaveNet(int num_nodes, float dropout, float* supports, bool d
       }
     } else {
       if (!supports) {
-        m_supports = nullptr;
+        m_supports = NULL;
       }
       // todo
       m, p, n = torch.svd(aptinit)
