@@ -53,6 +53,22 @@ class Conv1d {
     delete[] m_bias;
   }
 
+  const int outChannels() const {
+    return m_out_channels;
+  }
+
+  const int Dilation() const {
+    return m_dilation;
+  }
+
+  const int KernelH() const {
+    return m_kernelH;
+  }
+
+  const int KernelW() const {
+    return m_kernelW;
+  }
+
   void forward(float* input,  int inW,  int minibatch,
                float* output, int outW) {
     /* convolution */
@@ -79,23 +95,20 @@ class Conv1d {
   }
 
   private:
-  int m_in_channels;
-  int m_out_channels;
-  int m_kernelH;
-  int m_kernelW;
-  int m_dilation;
+  const int m_in_channels;
+  const int m_out_channels;
+  const int m_kernelH;
+  const int m_kernelW;
+  const int m_dilation;
   float* m_weight;
   float* m_bias;
 };
 
 class Conv2d {  
   public:
-  Conv2d(int in_channels, int out_channels, int kernelH, int kernelW, int dilation = 1, bool bias = true) {
-    m_in_channels = in_channels;
-    m_out_channels = out_channels;
-    m_kernelH = kernelH;
-    m_kernelW = kernelW;
-    m_dilation = dilation;
+  Conv2d(int in_channels, int out_channels, int kernelH, int kernelW, int dilation = 1, bool bias = true)
+  :m_in_channels(in_channels), m_out_channels(out_channels),
+   m_kernelH(kernelH), m_kernelW(kernelW), m_dilation(dilation) {    
     m_weight = new float[m_kernelH][m_kernelW];
     m_bias = new float[m_out_channels];
   }
@@ -103,6 +116,22 @@ class Conv2d {
   ~Conv2d() {
     delete[] m_weight;
     delete[] m_bias;
+  }
+
+  const int outChannels() const {
+    return m_out_channels;
+  }
+
+  const int Dilation() const {
+    return m_dilation;
+  }
+
+  const int KernelH() const {
+    return m_kernelH;
+  }
+
+  const int KernelW() const {
+    return m_kernelW;
   }
 
   void forward(float* input,  int inH,  int inW,  int minibatch,
@@ -137,11 +166,11 @@ class Conv2d {
   }
 
   private:
-  int m_in_channels;
-  int m_out_channels;
-  int m_kernelH;
-  int m_kernelW;
-  int m_dilation;
+  const int m_in_channels;
+  const int m_out_channels;
+  const int m_kernelH;
+  const int m_kernelW;
+  const int m_dilation;
   float m_weight[m_kernelH][m_kernelW];
   float m_bias[m_out_channels];
 };
@@ -305,7 +334,7 @@ GraphWaveNet::GraphWaveNet(float* supports, bool gcn_bool,
 }
 
 float* GraphWaveNet::forward(float* input) {
-  int xDim3 = max(kInDim3, kReceptiveField);
+  int xDim3 = max(kInDim3, kReceptiveField); // may need to hard code
   float x[kInDim0][kInDim1][kInDim2][xDim3];
   if (kInDim3 < kReceptiveField) {
     /* pad */
@@ -332,7 +361,9 @@ float* GraphWaveNet::forward(float* input) {
       }
     }
   }
-
+  int xH = ;
+  int xW = ;
+  float x_tmp[kInDim0][kResidualChannels][xH][xW];
   int skip = 0;
   
   // calculate the current adaptive adj matrix once per iteration
